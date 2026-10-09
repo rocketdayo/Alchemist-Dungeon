@@ -30,6 +30,7 @@ export function App() {
     player,
     dungeonFloor,
     enemies,
+    enemyProjectiles,
     nodes,
     projectiles,
     areaEffects,
@@ -82,6 +83,7 @@ export function App() {
             player={player}
             dungeonFloor={dungeonFloor}
             enemies={enemies}
+            enemyProjectiles={enemyProjectiles}
             nodes={nodes}
             projectiles={projectiles}
             areaEffects={areaEffects}

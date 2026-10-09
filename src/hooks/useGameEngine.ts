@@ -4,6 +4,7 @@ import type {
   ElementInventory,
   Player,
   Enemy,
+  EnemyProjectile,
   ResourceNode,
   DungeonFloor,
   Particle,
@@ -57,6 +58,7 @@ export const useGameEngine = () => {
 
   const [dungeonFloor, setDungeonFloor] = useState<DungeonFloor | null>(null)
   const [enemies, setEnemies] = useState<Enemy[]>([])
+  const [enemyProjectiles, setEnemyProjectiles] = useState<EnemyProjectile[]>([])
   const [nodes, setNodes] = useState<ResourceNode[]>([])
   const [projectiles, setProjectiles] = useState<Projectile[]>([])
   const [areaEffects, setAreaEffects] = useState<AreaEffect[]>([])
@@ -68,6 +70,8 @@ export const useGameEngine = () => {
   const mousePos = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const lastTimeRef = useRef<number>(performance.now())
   const shakeIntensityRef = useRef<number>(0)
+  const flowFieldRef = useRef<{ dx: number; dy: number }[][]>([])
+  const lastFlowTargetRef = useRef<{ x: number; y: number }>({ x: -1, y: -1 })
   const statsRef = useRef<GameStats>(stats)
   statsRef.current = stats
 
@@ -134,12 +138,12 @@ export const useGameEngine = () => {
         maxLife: Math.random() * 0.35 + 0.25,
       })
     }
-    setParticles(prev => [...prev.slice(-120), ...newParticles])
+    setParticles(prev => [...prev.slice(-140), ...newParticles])
   }, [])
 
   const addFloatingText = useCallback((x: number, y: number, text: string, color: string) => {
     setFloatingTexts(prev => [
-      ...prev.slice(-20),
+      ...prev.slice(-25),
       {
         id: `ft-${Math.random().toString(36).substr(2, 7)}`,
         x,
@@ -157,10 +161,115 @@ export const useGameEngine = () => {
     shakeIntensityRef.current = Math.min(shakeIntensityRef.current + intensity, 18)
   }, [settings.screenShakeEnabled])
 
+  const computeFlowField = useCallback((floor: DungeonFloor, targetTileX: number, targetTileY: number) => {
+    const w = floor.width
+    const h = floor.height
+    const dist: number[][] = Array.from({ length: h }, () => Array(w).fill(9999))
+    const queue: [number, number][] = []
+
+    if (
+      targetTileX >= 0 &&
+      targetTileX < w &&
+      targetTileY >= 0 &&
+      targetTileY < h &&
+      floor.tiles[targetTileY][targetTileX].type !== 'wall'
+    ) {
+      dist[targetTileY][targetTileX] = 0
+      queue.push([targetTileX, targetTileY])
+    }
+
+    const dirs = [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ]
+
+    let head = 0
+    while (head < queue.length) {
+      const [cx, cy] = queue[head++]
+      const cd = dist[cy][cx]
+
+      for (const [dx, dy] of dirs) {
+        const nx = cx + dx
+        const ny = cy + dy
+        if (
+          nx >= 0 &&
+          nx < w &&
+          ny >= 0 &&
+          ny < h &&
+          floor.tiles[ny][nx].type !== 'wall'
+        ) {
+          if (dist[ny][nx] > cd + 1) {
+            dist[ny][nx] = cd + 1
+            queue.push([nx, ny])
+          }
+        }
+      }
+    }
+
+    const field: { dx: number; dy: number }[][] = Array.from({ length: h }, () =>
+      Array(w).fill({ dx: 0, dy: 0 })
+    )
+
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (floor.tiles[y][x].type === 'wall' || dist[y][x] === 0 || dist[y][x] >= 9999) {
+          field[y][x] = { dx: 0, dy: 0 }
+          continue
+        }
+
+        let bestD = dist[y][x]
+        let bestDir = { dx: 0, dy: 0 }
+
+        for (const [dx, dy] of dirs) {
+          const nx = x + dx
+          const ny = y + dy
+          if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+            if (dist[ny][nx] < bestD) {
+              bestD = dist[ny][nx]
+              bestDir = { dx, dy }
+            }
+          }
+        }
+
+        field[y][x] = bestDir
+      }
+    }
+
+    flowFieldRef.current = field
+    lastFlowTargetRef.current = { x: targetTileX, y: targetTileY }
+  }, [])
+
+  const hasLineOfSight = useCallback((floor: DungeonFloor, x0: number, y0: number, x1: number, y1: number): boolean => {
+    const dist = Math.hypot(x1 - x0, y1 - y0)
+    const steps = Math.ceil(dist / 14)
+    if (steps <= 1) return true
+
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps
+      const cx = x0 + (x1 - x0) * t
+      const cy = y0 + (y1 - y0) * t
+      const tx = Math.floor(cx / TILE_SIZE)
+      const ty = Math.floor(cy / TILE_SIZE)
+      if (
+        tx < 0 ||
+        tx >= floor.width ||
+        ty < 0 ||
+        ty >= floor.height ||
+        floor.tiles[ty][tx].type === 'wall'
+      ) {
+        return false
+      }
+    }
+    return true
+  }, [])
+
   const initializeFloor = useCallback((newFloorNum: number, existingPlayer?: Player) => {
     const generated = generateDungeonFloor(newFloorNum)
     setDungeonFloor(generated.floor)
     setEnemies(generated.enemies)
+    setEnemyProjectiles([])
     setNodes(generated.nodes)
     setProjectiles([])
     setAreaEffects([])
@@ -170,11 +279,18 @@ export const useGameEngine = () => {
       y: generated.floor.spawnPosition.y * TILE_SIZE + 16,
     }
 
-    setPlayer(prev => ({
-      ...(existingPlayer || prev),
+    const nextPlayer = {
+      ...(existingPlayer || player),
       x: spawnPx.x,
       y: spawnPx.y,
-    }))
+    }
+    setPlayer(nextPlayer)
+
+    computeFlowField(
+      generated.floor,
+      generated.floor.spawnPosition.x,
+      generated.floor.spawnPosition.y
+    )
 
     setFloorNumber(newFloorNum)
     setStats(prev => {
@@ -187,7 +303,7 @@ export const useGameEngine = () => {
     })
     setPhase('exploring')
     lastTimeRef.current = performance.now()
-  }, [])
+  }, [computeFlowField, player])
 
   const startGame = useCallback(() => {
     const initialPlayer: Player = {
@@ -284,8 +400,29 @@ export const useGameEngine = () => {
     const dist = Math.hypot(worldTargetX - player.x, worldTargetY - player.y)
     const clampedDist = Math.min(dist, 320)
     const angle = Math.atan2(worldTargetY - player.y, worldTargetX - player.x)
-    const actualTargetX = player.x + Math.cos(angle) * clampedDist
-    const actualTargetY = player.y + Math.sin(angle) * clampedDist
+    let actualTargetX = player.x + Math.cos(angle) * clampedDist
+    let actualTargetY = player.y + Math.sin(angle) * clampedDist
+
+    if (dungeonFloor) {
+      const steps = Math.ceil(clampedDist / 10)
+      for (let s = 1; s <= steps; s++) {
+        const testX = player.x + Math.cos(angle) * (s * 10)
+        const testY = player.y + Math.sin(angle) * (s * 10)
+        const tx = Math.floor(testX / TILE_SIZE)
+        const ty = Math.floor(testY / TILE_SIZE)
+        if (
+          tx >= 0 &&
+          tx < dungeonFloor.width &&
+          ty >= 0 &&
+          ty < dungeonFloor.height &&
+          dungeonFloor.tiles[ty][tx].type === 'wall'
+        ) {
+          actualTargetX = testX - Math.cos(angle) * 8
+          actualTargetY = testY - Math.sin(angle) * 8
+          break
+        }
+      }
+    }
 
     setProjectiles(prev => [
       ...prev,
@@ -305,7 +442,7 @@ export const useGameEngine = () => {
 
     setAlchemySlots([])
     setReadyPotion(null)
-  }, [readyPotion, player, addFloatingText, addParticles])
+  }, [readyPotion, player, dungeonFloor, addFloatingText, addParticles])
 
   const harvestNearbyNode = useCallback(() => {
     if (!dungeonFloor) return
@@ -414,6 +551,7 @@ export const useGameEngine = () => {
     if (phase !== 'exploring' || !dungeonFloor) return
 
     let animId: number
+    let flowUpdateTimer = 0
 
     const isTileBlocked = (worldX: number, worldY: number, radius: number = 8): boolean => {
       const corners = [
@@ -441,6 +579,18 @@ export const useGameEngine = () => {
     const gameLoop = (currentTime: number) => {
       const dt = Math.min((currentTime - lastTimeRef.current) / 1000, 0.05)
       lastTimeRef.current = currentTime
+
+      flowUpdateTimer += dt
+      const pTileX = Math.floor(player.x / TILE_SIZE)
+      const pTileY = Math.floor(player.y / TILE_SIZE)
+      if (
+        flowUpdateTimer > 0.25 ||
+        pTileX !== lastFlowTargetRef.current.x ||
+        pTileY !== lastFlowTargetRef.current.y
+      ) {
+        flowUpdateTimer = 0
+        computeFlowField(dungeonFloor, pTileX, pTileY)
+      }
 
       if (shakeIntensityRef.current > 0) {
         const sx = (Math.random() * 2 - 1) * shakeIntensityRef.current
@@ -471,12 +621,8 @@ export const useGameEngine = () => {
         let finalX = prev.x
         let finalY = prev.y
 
-        if (!isTileBlocked(newX, prev.y, 9)) {
-          finalX = newX
-        }
-        if (!isTileBlocked(finalX, newY, 9)) {
-          finalY = newY
-        }
+        if (!isTileBlocked(newX, prev.y, 9)) finalX = newX
+        if (!isTileBlocked(finalX, newY, 9)) finalY = newY
 
         const tileX = Math.floor(finalX / TILE_SIZE)
         const tileY = Math.floor(finalY / TILE_SIZE)
@@ -602,6 +748,51 @@ export const useGameEngine = () => {
         return nextProj
       })
 
+      setEnemyProjectiles(prevEp => {
+        const nextEp: EnemyProjectile[] = []
+        prevEp.forEach(ep => {
+          const nextX = ep.x + ep.vx * dt
+          const nextY = ep.y + ep.vy * dt
+          const nextLife = ep.life + dt
+
+          const hitWall = isTileBlocked(nextX, nextY, 4)
+          const distToP = Math.hypot(player.x - nextX, player.y - nextY)
+
+          if (distToP < 16) {
+            soundEngine.playHit()
+            triggerShake(4)
+            setPlayer(pl => {
+              let dmg = ep.damage
+              let newShield = pl.shield
+              let newHp = pl.hp
+
+              if (newShield > 0) {
+                const absorb = Math.min(newShield, dmg)
+                newShield -= absorb
+                dmg -= absorb
+                addFloatingText(pl.x, pl.y - 25, `-${absorb} SHIELD`, '#38bdf8')
+              }
+              if (dmg > 0) {
+                newHp = Math.max(0, newHp - dmg)
+                addFloatingText(pl.x, pl.y - 15, `-${dmg} HP`, '#ef4444')
+              }
+              if (newHp <= 0) setPhase('game_over')
+
+              return { ...pl, hp: newHp, shield: newShield }
+            })
+            addParticles(nextX, nextY, ep.color, 12, 60, 3)
+            return
+          }
+
+          if (!hitWall && nextLife < ep.maxLife) {
+            nextEp.push({ ...ep, x: nextX, y: nextY, life: nextLife })
+          } else {
+            addParticles(nextX, nextY, ep.color, 6, 40, 2)
+          }
+        })
+        return nextEp
+      })
+
       setAreaEffects(prevAoe => {
         const nextAoe: AreaEffect[] = []
         prevAoe.forEach(aoe => {
@@ -651,7 +842,9 @@ export const useGameEngine = () => {
 
       setEnemies(prevEnemies => {
         const aliveEnemies: Enemy[] = []
-        prevEnemies.forEach(enemy => {
+        const newProjectilesToAdd: EnemyProjectile[] = []
+
+        prevEnemies.forEach((enemy, idx) => {
           if (enemy.hp <= 0) {
             addParticles(enemy.x, enemy.y, enemy.color, 18, 90, 4)
             setStats(st => {
@@ -685,21 +878,122 @@ export const useGameEngine = () => {
           let currentX = enemy.x
           let currentY = enemy.y
           let cd = Math.max(0, enemy.attackCooldown - dt)
+          let specialCd = Math.max(0, enemy.specialCooldown - dt)
+          let isPhasing = enemy.isPhasing || false
 
           const distToPlayer = Math.hypot(player.x - enemy.x, player.y - enemy.y)
+          const hasLos = hasLineOfSight(dungeonFloor, enemy.x, enemy.y, player.x, player.y)
 
-          if (!isFrozen && distToPlayer < 380) {
-            const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x)
-            const moveSpeed = enemy.speed * dt
-            const stepX = Math.cos(angle) * moveSpeed
-            const stepY = Math.sin(angle) * moveSpeed
+          if (!isFrozen && distToPlayer < 450) {
+            let desiredVx = 0
+            let desiredVy = 0
+
+            const eTileX = Math.floor(enemy.x / TILE_SIZE)
+            const eTileY = Math.floor(enemy.y / TILE_SIZE)
+
+            if (hasLos && (enemy.aiRole === 'swarmer' || isPhasing || distToPlayer < 100)) {
+              const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x)
+              desiredVx = Math.cos(angle)
+              desiredVy = Math.sin(angle)
+            } else {
+              const flow =
+                flowFieldRef.current[eTileY] && flowFieldRef.current[eTileY][eTileX]
+                  ? flowFieldRef.current[eTileY][eTileX]
+                  : { dx: 0, dy: 0 }
+
+              if (flow.dx !== 0 || flow.dy !== 0) {
+                desiredVx = flow.dx
+                desiredVy = flow.dy
+              } else {
+                const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x)
+                desiredVx = Math.cos(angle)
+                desiredVy = Math.sin(angle)
+              }
+            }
+
+            let sepX = 0
+            let sepY = 0
+            prevEnemies.forEach((other, oIdx) => {
+              if (idx === oIdx || other.hp <= 0) return
+              const d = Math.hypot(enemy.x - other.x, enemy.y - other.y)
+              if (d > 0 && d < 26) {
+                sepX += (enemy.x - other.x) / d
+                sepY += (enemy.y - other.y) / d
+              }
+            })
+
+            let moveSpeed = enemy.speed
+            if (enemy.aiRole === 'swarmer' && distToPlayer < 90 && hasLos) {
+              moveSpeed *= 1.35
+            }
+
+            let finalVx = desiredVx + sepX * 0.7
+            let finalVy = desiredVy + sepY * 0.7
+            const vLen = Math.hypot(finalVx, finalVy)
+            if (vLen > 0) {
+              finalVx /= vLen
+              finalVy /= vLen
+            }
+
+            let stepX = finalVx * moveSpeed * dt
+            let stepY = finalVy * moveSpeed * dt
+
+            if (enemy.aiRole === 'phaser' && specialCd <= 0 && distToPlayer > 80) {
+              isPhasing = true
+              specialCd = 4.0
+              addParticles(enemy.x, enemy.y, '#f97316', 10, 50, 3)
+            } else if (isPhasing && specialCd < 2.5) {
+              isPhasing = false
+            }
+
+            if (enemy.aiRole === 'teleporter' && specialCd <= 0 && (!hasLos || distToPlayer > 180)) {
+              specialCd = 5.0
+              const angleToP = Math.random() * Math.PI * 2
+              const warpDist = 48 + Math.random() * 32
+              const warpX = player.x + Math.cos(angleToP) * warpDist
+              const warpY = player.y + Math.sin(angleToP) * warpDist
+              if (!isTileBlocked(warpX, warpY, 11)) {
+                addParticles(currentX, currentY, '#9333ea', 16, 70, 3)
+                currentX = warpX
+                currentY = warpY
+                addParticles(currentX, currentY, '#c084fc', 20, 90, 4)
+                soundEngine.playFreeze()
+              }
+            }
+
+            if (enemy.aiRole === 'ranger' && specialCd <= 0 && hasLos && distToPlayer > 70 && distToPlayer < 280) {
+              specialCd = 2.4
+              const bAngle = Math.atan2(player.y - enemy.y, player.x - enemy.x)
+              newProjectilesToAdd.push({
+                id: `ep-${Math.random().toString(36).substr(2, 7)}`,
+                x: enemy.x,
+                y: enemy.y,
+                vx: Math.cos(bAngle) * 220,
+                vy: Math.sin(bAngle) * 220,
+                damage: Math.round(enemy.attack * 0.8),
+                color: '#e2e8f0',
+                life: 0,
+                maxLife: 2.2,
+              })
+              soundEngine.playPotionThrow()
+            }
 
             const enemyRadius = 10
-            if (!isTileBlocked(currentX + stepX, currentY, enemyRadius)) {
+            if (isPhasing) {
               currentX += stepX
-            }
-            if (!isTileBlocked(currentX, currentY + stepY, enemyRadius)) {
               currentY += stepY
+            } else {
+              if (!isTileBlocked(currentX + stepX, currentY, enemyRadius)) {
+                currentX += stepX
+              } else if (!isTileBlocked(currentX, currentY + Math.sign(stepY || 1) * moveSpeed * dt, enemyRadius)) {
+                currentY += Math.sign(stepY || 1) * moveSpeed * dt
+              }
+
+              if (!isTileBlocked(currentX, currentY + stepY, enemyRadius)) {
+                currentY += stepY
+              } else if (!isTileBlocked(currentX + Math.sign(stepX || 1) * moveSpeed * dt, currentY, enemyRadius)) {
+                currentX += Math.sign(stepX || 1) * moveSpeed * dt
+              }
             }
 
             if (distToPlayer < 24 && cd <= 0) {
@@ -742,8 +1036,15 @@ export const useGameEngine = () => {
             y: currentY,
             statusEffects: nextStatuses,
             attackCooldown: cd,
+            specialCooldown: specialCd,
+            isPhasing,
           })
         })
+
+        if (newProjectilesToAdd.length > 0) {
+          setEnemyProjectiles(prev => [...prev, ...newProjectilesToAdd])
+        }
+
         return aliveEnemies
       })
 
@@ -786,6 +1087,8 @@ export const useGameEngine = () => {
     addParticles,
     addFloatingText,
     triggerShake,
+    computeFlowField,
+    hasLineOfSight,
   ])
 
   return {
@@ -804,6 +1107,7 @@ export const useGameEngine = () => {
     player,
     dungeonFloor,
     enemies,
+    enemyProjectiles,
     nodes,
     projectiles,
     areaEffects,

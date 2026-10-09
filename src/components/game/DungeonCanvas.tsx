@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useCallback } from 'react'
 import type {
   Player,
   Enemy,
+  EnemyProjectile,
   ResourceNode,
   DungeonFloor,
   Particle,
@@ -18,6 +19,7 @@ interface DungeonCanvasProps {
   player: Player
   dungeonFloor: DungeonFloor | null
   enemies: Enemy[]
+  enemyProjectiles: EnemyProjectile[]
   nodes: ResourceNode[]
   projectiles: Projectile[]
   areaEffects: AreaEffect[]
@@ -33,6 +35,7 @@ export const DungeonCanvas: React.FC<DungeonCanvasProps> = ({
   player,
   dungeonFloor,
   enemies,
+  enemyProjectiles,
   nodes,
   projectiles,
   areaEffects,
@@ -207,6 +210,13 @@ export const DungeonCanvas: React.FC<DungeonCanvasProps> = ({
 
     enemies.forEach(enemy => {
       ctx.save()
+
+      if (enemy.isPhasing) {
+        ctx.globalAlpha = 0.55
+        ctx.shadowColor = '#f97316'
+        ctx.shadowBlur = 14
+      }
+
       ctx.fillStyle = enemy.color
       ctx.beginPath()
       ctx.arc(enemy.x, enemy.y, 11, 0, Math.PI * 2)
@@ -263,6 +273,17 @@ export const DungeonCanvas: React.FC<DungeonCanvasProps> = ({
       ctx.font = '7px sans-serif'
       ctx.fillText('R', enemy.x + 7, enemy.y + 19)
 
+      ctx.restore()
+    })
+
+    enemyProjectiles.forEach(ep => {
+      ctx.save()
+      ctx.shadowColor = ep.color
+      ctx.shadowBlur = 8
+      ctx.fillStyle = ep.color
+      ctx.beginPath()
+      ctx.arc(ep.x, ep.y, 4.5, 0, Math.PI * 2)
+      ctx.fill()
       ctx.restore()
     })
 
@@ -343,6 +364,7 @@ export const DungeonCanvas: React.FC<DungeonCanvasProps> = ({
     player,
     dungeonFloor,
     enemies,
+    enemyProjectiles,
     nodes,
     projectiles,
     areaEffects,

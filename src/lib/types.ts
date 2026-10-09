@@ -52,10 +52,13 @@ export interface Player {
   unlockedRecipes: PotionEffectId[]
 }
 
+export type EnemyAiRole = 'swarmer' | 'ranger' | 'phaser' | 'teleporter' | 'tank'
+
 export interface Enemy {
   id: string
   name: string
   type: string
+  aiRole: EnemyAiRole
   x: number
   y: number
   hp: number
@@ -68,6 +71,20 @@ export interface Enemy {
   color: string
   statusEffects: StatusEffect[]
   attackCooldown: number
+  specialCooldown: number
+  isPhasing?: boolean
+}
+
+export interface EnemyProjectile {
+  id: string
+  x: number
+  y: number
+  vx: number
+  vy: number
+  damage: number
+  color: string
+  life: number
+  maxLife: number
 }
 
 export interface ResourceNode {

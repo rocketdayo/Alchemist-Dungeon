@@ -1,59 +1,75 @@
-import type { DungeonFloor, Enemy, ResourceNode, Room, Tile, ElementType } from '../lib/types'
+import type { DungeonFloor, Enemy, ResourceNode, Room, Tile, ElementType, EnemyAiRole } from '../lib/types'
 
-const ENEMY_TEMPLATES = [
+const ENEMY_TEMPLATES: {
+  type: string
+  name: string
+  aiRole: EnemyAiRole
+  baseHp: number
+  speed: number
+  attack: number
+  defense: number
+  weakElement: ElementType
+  resistElement: ElementType
+  color: string
+}[] = [
   {
     type: 'slime',
     name: 'Toxic Slime',
+    aiRole: 'swarmer',
     baseHp: 45,
-    speed: 48,
+    speed: 56,
     attack: 8,
     defense: 0,
-    weakElement: 'pyr' as ElementType,
-    resistElement: 'aqua' as ElementType,
+    weakElement: 'pyr',
+    resistElement: 'aqua',
     color: '#22c55e',
   },
   {
     type: 'skeleton',
     name: 'Bone Wanderer',
+    aiRole: 'ranger',
     baseHp: 65,
-    speed: 58,
+    speed: 62,
     attack: 14,
     defense: 4,
-    weakElement: 'terra' as ElementType,
-    resistElement: 'nox' as ElementType,
+    weakElement: 'terra',
+    resistElement: 'nox',
     color: '#e2e8f0',
   },
   {
     type: 'fire_elemental',
     name: 'Blaze Spectre',
+    aiRole: 'phaser',
     baseHp: 80,
-    speed: 68,
+    speed: 72,
     attack: 18,
     defense: 6,
-    weakElement: 'aqua' as ElementType,
-    resistElement: 'pyr' as ElementType,
+    weakElement: 'aqua',
+    resistElement: 'pyr',
     color: '#f97316',
   },
   {
     type: 'shadow_fiend',
     name: 'Abyssal Ghoul',
+    aiRole: 'teleporter',
     baseHp: 95,
-    speed: 52,
+    speed: 55,
     attack: 22,
     defense: 8,
-    weakElement: 'pyr' as ElementType,
-    resistElement: 'nox' as ElementType,
+    weakElement: 'pyr',
+    resistElement: 'nox',
     color: '#9333ea',
   },
   {
     type: 'gargoyle',
     name: 'Stone Gargoyle',
+    aiRole: 'tank',
     baseHp: 130,
-    speed: 36,
+    speed: 40,
     attack: 24,
     defense: 18,
-    weakElement: 'nox' as ElementType,
-    resistElement: 'terra' as ElementType,
+    weakElement: 'nox',
+    resistElement: 'terra',
     color: '#64748b',
   },
 ]
@@ -170,6 +186,7 @@ export const generateDungeonFloor = (floorNumber: number): {
         id: `enemy-${i}-${e}-${Math.random().toString(36).substr(2, 5)}`,
         name: t.name,
         type: t.type,
+        aiRole: t.aiRole,
         x: ex * 32 + 16,
         y: ey * 32 + 16,
         hp: Math.round(t.baseHp * hpScale),
@@ -182,6 +199,7 @@ export const generateDungeonFloor = (floorNumber: number): {
         color: t.color,
         statusEffects: [],
         attackCooldown: 0,
+        specialCooldown: 1.5 + Math.random() * 2,
       })
     }
 
