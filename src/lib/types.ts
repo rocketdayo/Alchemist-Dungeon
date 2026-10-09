@@ -150,7 +150,7 @@ export interface AreaEffect {
   tickTimer: number
 }
 
-export type GameStatePhase = 'start' | 'exploring' | 'rest_site' | 'game_over' | 'victory'
+export type GameStatePhase = 'loading' | 'home' | 'exploring' | 'paused' | 'rest_site' | 'game_over' | 'victory'
 
 export interface UpgradeOption {
   id: string
@@ -159,4 +159,18 @@ export interface UpgradeOption {
   cost: Partial<ElementInventory>
   apply: (player: Player) => void
   recipeToUnlock?: PotionEffectId
+}
+
+export interface GameStats {
+  totalPlayTimeSeconds: number
+  totalKills: number
+  highestFloor: number
+  totalPotionsBrewed: number
+  discoveredRecipes: string[]
+}
+
+export interface GameSettings {
+  soundEnabled: boolean
+  masterVolume: number
+  screenShakeEnabled: boolean
 }

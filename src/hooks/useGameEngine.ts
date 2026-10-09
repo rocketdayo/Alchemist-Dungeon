@@ -12,16 +12,27 @@ import type {
   AreaEffect,
   GameStatePhase,
   PotionRecipe,
+  GameStats,
+  GameSettings,
 } from '../lib/types'
 import { generateDungeonFloor } from '../engine/dungeonGenerator'
 import { evaluateRecipe, POTION_RECIPES } from '../engine/alchemyRecipes'
 import { soundEngine } from '../engine/soundEngine'
+import {
+  loadGameStats,
+  saveGameStats,
+  loadGameSettings,
+  saveGameSettings,
+} from '../lib/storage'
 
 const TILE_SIZE = 32
 
 export const useGameEngine = () => {
-  const [phase, setPhase] = useState<GameStatePhase>('start')
+  const [phase, setPhase] = useState<GameStatePhase>('loading')
   const [floorNumber, setFloorNumber] = useState<number>(1)
+  const [stats, setStats] = useState<GameStats>(loadGameStats)
+  const [settings, setSettings] = useState<GameSettings>(loadGameSettings)
+
   const [inventory, setInventory] = useState<ElementInventory>({
     pyr: 5,
     aqua: 5,
@@ -30,11 +41,6 @@ export const useGameEngine = () => {
   })
   const [alchemySlots, setAlchemySlots] = useState<ElementType[]>([])
   const [readyPotion, setReadyPotion] = useState<PotionRecipe | null>(null)
-  const [discoveredRecipes, setDiscoveredRecipes] = useState<string[]>([
-    'inferno_bomb',
-    'frost_shock',
-    'healing_elixir',
-  ])
 
   const [player, setPlayer] = useState<Player>({
     x: 0,
@@ -62,6 +68,46 @@ export const useGameEngine = () => {
   const mousePos = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const lastTimeRef = useRef<number>(performance.now())
   const shakeIntensityRef = useRef<number>(0)
+  const statsRef = useRef<GameStats>(stats)
+  statsRef.current = stats
+
+  const updateSettings = useCallback((newSettings: Partial<GameSettings>) => {
+    setSettings(prev => {
+      const updated = { ...prev, ...newSettings }
+      saveGameSettings(updated)
+      soundEngine.setSettings(updated.soundEnabled, updated.masterVolume)
+      return updated
+    })
+  }, [])
+
+  useEffect(() => {
+    soundEngine.setSettings(settings.soundEnabled, settings.masterVolume)
+  }, [settings.soundEnabled, settings.masterVolume])
+
+  const finishLoading = useCallback(() => {
+    setPhase('home')
+  }, [])
+
+  const goToHome = useCallback(() => {
+    setPhase('home')
+    setAlchemySlots([])
+    setReadyPotion(null)
+  }, [])
+
+  const togglePause = useCallback(() => {
+    setPhase(cur => {
+      if (cur === 'exploring') {
+        soundEngine.playClick()
+        return 'paused'
+      }
+      if (cur === 'paused') {
+        soundEngine.playClick()
+        lastTimeRef.current = performance.now()
+        return 'exploring'
+      }
+      return cur
+    })
+  }, [])
 
   const addParticles = useCallback((
     x: number,
@@ -107,8 +153,9 @@ export const useGameEngine = () => {
   }, [])
 
   const triggerShake = useCallback((intensity: number) => {
+    if (!settings.screenShakeEnabled) return
     shakeIntensityRef.current = Math.min(shakeIntensityRef.current + intensity, 18)
-  }, [])
+  }, [settings.screenShakeEnabled])
 
   const initializeFloor = useCallback((newFloorNum: number, existingPlayer?: Player) => {
     const generated = generateDungeonFloor(newFloorNum)
@@ -130,7 +177,16 @@ export const useGameEngine = () => {
     }))
 
     setFloorNumber(newFloorNum)
+    setStats(prev => {
+      const updated = {
+        ...prev,
+        highestFloor: Math.max(prev.highestFloor, newFloorNum),
+      }
+      saveGameStats(updated)
+      return updated
+    })
     setPhase('exploring')
+    lastTimeRef.current = performance.now()
   }, [])
 
   const startGame = useCallback(() => {
@@ -144,7 +200,7 @@ export const useGameEngine = () => {
       speed: 130,
       crucibleCapacity: 2,
       elementYieldBonus: 0,
-      unlockedRecipes: ['inferno_bomb', 'frost_shock', 'healing_elixir'],
+      unlockedRecipes: statsRef.current.discoveredRecipes as any,
     }
     setInventory({
       pyr: 6,
@@ -170,11 +226,20 @@ export const useGameEngine = () => {
     if (nextSlots.length >= 2) {
       const recipe = evaluateRecipe(nextSlots)
       setReadyPotion(recipe)
-      if (!discoveredRecipes.includes(recipe.id)) {
-        setDiscoveredRecipes(prev => [...prev, recipe.id])
-      }
+      setStats(prev => {
+        const isDiscovered = prev.discoveredRecipes.includes(recipe.id)
+        const updated = {
+          ...prev,
+          totalPotionsBrewed: prev.totalPotionsBrewed + 1,
+          discoveredRecipes: isDiscovered
+            ? prev.discoveredRecipes
+            : [...prev.discoveredRecipes, recipe.id],
+        }
+        saveGameStats(updated)
+        return updated
+      })
     }
-  }, [inventory, alchemySlots, player.crucibleCapacity, discoveredRecipes])
+  }, [inventory, alchemySlots, player.crucibleCapacity])
 
   const clearAlchemySlots = useCallback(() => {
     if (alchemySlots.length === 0) return
@@ -297,11 +362,16 @@ export const useGameEngine = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        togglePause()
+        return
+      }
+
+      if (phase !== 'exploring') return
+
       keysPressed.current[e.key.toLowerCase()] = true
 
-      if (e.key.toLowerCase() === 'e') {
-        harvestNearbyNode()
-      }
+      if (e.key.toLowerCase() === 'e') harvestNearbyNode()
       if (e.key === '1') addElementToSlot('pyr')
       if (e.key === '2') addElementToSlot('aqua')
       if (e.key === '3') addElementToSlot('terra')
@@ -323,12 +393,50 @@ export const useGameEngine = () => {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
     }
-  }, [addElementToSlot, clearAlchemySlots, harvestNearbyNode, readyPotion, throwCurrentPotion])
+  }, [phase, addElementToSlot, clearAlchemySlots, harvestNearbyNode, readyPotion, throwCurrentPotion, togglePause])
+
+  useEffect(() => {
+    if (phase !== 'exploring') return
+    const interval = setInterval(() => {
+      setStats(prev => {
+        const updated = {
+          ...prev,
+          totalPlayTimeSeconds: prev.totalPlayTimeSeconds + 1,
+        }
+        saveGameStats(updated)
+        return updated
+      })
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [phase])
 
   useEffect(() => {
     if (phase !== 'exploring' || !dungeonFloor) return
 
     let animId: number
+
+    const isTileBlocked = (worldX: number, worldY: number, radius: number = 8): boolean => {
+      const corners = [
+        { x: worldX - radius, y: worldY - radius },
+        { x: worldX + radius, y: worldY - radius },
+        { x: worldX - radius, y: worldY + radius },
+        { x: worldX + radius, y: worldY + radius },
+      ]
+      for (const pt of corners) {
+        const tx = Math.floor(pt.x / TILE_SIZE)
+        const ty = Math.floor(pt.y / TILE_SIZE)
+        if (
+          tx < 0 ||
+          tx >= dungeonFloor.width ||
+          ty < 0 ||
+          ty >= dungeonFloor.height ||
+          dungeonFloor.tiles[ty][tx].type === 'wall'
+        ) {
+          return true
+        }
+      }
+      return false
+    }
 
     const gameLoop = (currentTime: number) => {
       const dt = Math.min((currentTime - lastTimeRef.current) / 1000, 0.05)
@@ -360,24 +468,26 @@ export const useGameEngine = () => {
         let newX = prev.x + dx * prev.speed * dt
         let newY = prev.y + dy * prev.speed * dt
 
-        const tileX = Math.floor(newX / TILE_SIZE)
-        const tileY = Math.floor(newY / TILE_SIZE)
+        let finalX = prev.x
+        let finalY = prev.y
 
-        if (
-          tileX >= 0 &&
-          tileX < dungeonFloor.width &&
-          tileY >= 0 &&
-          tileY < dungeonFloor.height &&
-          dungeonFloor.tiles[tileY][tileX].type !== 'wall'
-        ) {
-          const stairs = dungeonFloor.stairsPosition
-          if (tileX === stairs.x && tileY === stairs.y) {
-            setPhase('rest_site')
-            soundEngine.playHeal()
-          }
-          return { ...prev, x: newX, y: newY }
+        if (!isTileBlocked(newX, prev.y, 9)) {
+          finalX = newX
         }
-        return prev
+        if (!isTileBlocked(finalX, newY, 9)) {
+          finalY = newY
+        }
+
+        const tileX = Math.floor(finalX / TILE_SIZE)
+        const tileY = Math.floor(finalY / TILE_SIZE)
+
+        const stairs = dungeonFloor.stairsPosition
+        if (tileX === stairs.x && tileY === stairs.y) {
+          setPhase('rest_site')
+          soundEngine.playHeal()
+        }
+
+        return { ...prev, x: finalX, y: finalY }
       })
 
       setProjectiles(prevProj => {
@@ -455,8 +565,10 @@ export const useGameEngine = () => {
                   let pushY = enemy.y
                   if (p.recipe.knockback) {
                     const kAngle = Math.atan2(enemy.y - currY, enemy.x - currX)
-                    pushX += Math.cos(kAngle) * p.recipe.knockback
-                    pushY += Math.sin(kAngle) * p.recipe.knockback
+                    const targetPushX = pushX + Math.cos(kAngle) * p.recipe.knockback
+                    const targetPushY = pushY + Math.sin(kAngle) * p.recipe.knockback
+                    if (!isTileBlocked(targetPushX, pushY, 9)) pushX = targetPushX
+                    if (!isTileBlocked(pushX, targetPushY, 9)) pushY = targetPushY
                   }
 
                   if (p.recipe.id === 'vampiric_drain') {
@@ -542,6 +654,11 @@ export const useGameEngine = () => {
         prevEnemies.forEach(enemy => {
           if (enemy.hp <= 0) {
             addParticles(enemy.x, enemy.y, enemy.color, 18, 90, 4)
+            setStats(st => {
+              const updated = { ...st, totalKills: st.totalKills + 1 }
+              saveGameStats(updated)
+              return updated
+            })
             if (Math.random() < 0.75) {
               const elements: ElementType[] = ['pyr', 'aqua', 'terra', 'nox']
               const droppedElem = enemy.weakElement || elements[Math.floor(Math.random() * elements.length)]
@@ -574,8 +691,16 @@ export const useGameEngine = () => {
           if (!isFrozen && distToPlayer < 380) {
             const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x)
             const moveSpeed = enemy.speed * dt
-            currentX += Math.cos(angle) * moveSpeed
-            currentY += Math.sin(angle) * moveSpeed
+            const stepX = Math.cos(angle) * moveSpeed
+            const stepY = Math.sin(angle) * moveSpeed
+
+            const enemyRadius = 10
+            if (!isTileBlocked(currentX + stepX, currentY, enemyRadius)) {
+              currentX += stepX
+            }
+            if (!isTileBlocked(currentX, currentY + stepY, enemyRadius)) {
+              currentY += stepY
+            }
 
             if (distToPlayer < 24 && cd <= 0) {
               cd = 1.0
@@ -667,10 +792,15 @@ export const useGameEngine = () => {
     phase,
     setPhase,
     floorNumber,
+    stats,
+    settings,
+    updateSettings,
+    finishLoading,
+    goToHome,
+    togglePause,
     inventory,
     alchemySlots,
     readyPotion,
-    discoveredRecipes,
     player,
     dungeonFloor,
     enemies,

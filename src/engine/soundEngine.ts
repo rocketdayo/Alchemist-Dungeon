@@ -1,7 +1,15 @@
 class SoundEngine {
   private ctx: AudioContext | null = null
+  private enabled: boolean = true
+  private volume: number = 0.8
+
+  setSettings(enabled: boolean, volume: number) {
+    this.enabled = enabled
+    this.volume = Math.max(0, Math.min(1, volume))
+  }
 
   private getContext(): AudioContext | null {
+    if (!this.enabled || this.volume <= 0) return null
     if (typeof window === 'undefined') return null
     if (!this.ctx) {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
@@ -27,7 +35,7 @@ class SoundEngine {
     osc.frequency.setValueAtTime(1200, now)
     osc.frequency.exponentialRampToValueAtTime(2400, now + 0.15)
 
-    gain.gain.setValueAtTime(0.2, now)
+    gain.gain.setValueAtTime(0.2 * this.volume, now)
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3)
 
     osc.connect(gain)
@@ -41,7 +49,7 @@ class SoundEngine {
     chime.type = 'sine'
     chime.frequency.setValueAtTime(1800, now + 0.05)
     chime.frequency.exponentialRampToValueAtTime(3200, now + 0.25)
-    chimeGain.gain.setValueAtTime(0.15, now + 0.05)
+    chimeGain.gain.setValueAtTime(0.15 * this.volume, now + 0.05)
     chimeGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35)
 
     chime.connect(chimeGain)
@@ -67,7 +75,7 @@ class SoundEngine {
       bubble.frequency.setValueAtTime(startFreq, startTime)
       bubble.frequency.exponentialRampToValueAtTime(endFreq, startTime + 0.06)
 
-      bubbleGain.gain.setValueAtTime(0.12, startTime)
+      bubbleGain.gain.setValueAtTime(0.12 * this.volume, startTime)
       bubbleGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.07)
 
       bubble.connect(bubbleGain)
@@ -83,7 +91,7 @@ class SoundEngine {
     sparkle.frequency.setValueAtTime(987.77, now + 0.18)
     sparkle.frequency.exponentialRampToValueAtTime(1975.53, now + 0.4)
 
-    sparkleGain.gain.setValueAtTime(0.2, now + 0.18)
+    sparkleGain.gain.setValueAtTime(0.2 * this.volume, now + 0.18)
     sparkleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5)
 
     sparkle.connect(sparkleGain)
@@ -105,7 +113,7 @@ class SoundEngine {
     osc.frequency.setValueAtTime(650, now)
     osc.frequency.exponentialRampToValueAtTime(120, now + 0.18)
 
-    gain.gain.setValueAtTime(0.15, now)
+    gain.gain.setValueAtTime(0.15 * this.volume, now)
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2)
 
     osc.connect(gain)
@@ -137,7 +145,7 @@ class SoundEngine {
     filter.frequency.exponentialRampToValueAtTime(80, now + 0.35)
 
     const noiseGain = ctx.createGain()
-    noiseGain.gain.setValueAtTime(0.35, now)
+    noiseGain.gain.setValueAtTime(0.35 * this.volume, now)
     noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35)
 
     noise.connect(filter)
@@ -153,7 +161,7 @@ class SoundEngine {
     sub.frequency.setValueAtTime(140, now)
     sub.frequency.exponentialRampToValueAtTime(35, now + 0.3)
 
-    subGain.gain.setValueAtTime(0.4, now)
+    subGain.gain.setValueAtTime(0.4 * this.volume, now)
     subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35)
 
     sub.connect(subGain)
@@ -178,7 +186,7 @@ class SoundEngine {
       osc.type = 'sine'
       osc.frequency.setValueAtTime(freq, startTime)
 
-      gain.gain.setValueAtTime(0.18, startTime)
+      gain.gain.setValueAtTime(0.18 * this.volume, startTime)
       gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.4)
 
       osc.connect(gain)
@@ -201,7 +209,7 @@ class SoundEngine {
     osc.frequency.setValueAtTime(180, now)
     osc.frequency.exponentialRampToValueAtTime(60, now + 0.12)
 
-    gain.gain.setValueAtTime(0.2, now)
+    gain.gain.setValueAtTime(0.2 * this.volume, now)
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12)
 
     osc.connect(gain)
@@ -223,7 +231,7 @@ class SoundEngine {
     osc.frequency.setValueAtTime(800, now)
     osc.frequency.exponentialRampToValueAtTime(400, now + 0.04)
 
-    gain.gain.setValueAtTime(0.1, now)
+    gain.gain.setValueAtTime(0.1 * this.volume, now)
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04)
 
     osc.connect(gain)
@@ -245,7 +253,7 @@ class SoundEngine {
     osc.frequency.setValueAtTime(1600, now)
     osc.frequency.exponentialRampToValueAtTime(700, now + 0.25)
 
-    gain.gain.setValueAtTime(0.15, now)
+    gain.gain.setValueAtTime(0.15 * this.volume, now)
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25)
 
     osc.connect(gain)
