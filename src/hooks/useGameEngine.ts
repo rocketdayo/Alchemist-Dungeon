@@ -890,25 +890,48 @@ export const useGameEngine = () => {
 
             const eTileX = Math.floor(enemy.x / TILE_SIZE)
             const eTileY = Math.floor(enemy.y / TILE_SIZE)
+            const curCenterX = eTileX * TILE_SIZE + 16
+            const curCenterY = eTileY * TILE_SIZE + 16
 
-            if (hasLos && (enemy.aiRole === 'swarmer' || isPhasing || distToPlayer < 100)) {
+            const flow =
+              flowFieldRef.current[eTileY] && flowFieldRef.current[eTileY][eTileX]
+                ? flowFieldRef.current[eTileY][eTileX]
+                : { dx: 0, dy: 0 }
+
+            const isDirectRush =
+              isPhasing ||
+              (hasLos && distToPlayer < 75) ||
+              (hasLos && enemy.aiRole === 'swarmer' && Math.abs(player.x - enemy.x) < 20) ||
+              (hasLos && enemy.aiRole === 'swarmer' && Math.abs(player.y - enemy.y) < 20)
+
+            if (isDirectRush) {
               const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x)
               desiredVx = Math.cos(angle)
               desiredVy = Math.sin(angle)
-            } else {
-              const flow =
-                flowFieldRef.current[eTileY] && flowFieldRef.current[eTileY][eTileX]
-                  ? flowFieldRef.current[eTileY][eTileX]
-                  : { dx: 0, dy: 0 }
+            } else if (flow.dx !== 0 || flow.dy !== 0) {
+              let targetX = (eTileX + flow.dx) * TILE_SIZE + 16
+              let targetY = (eTileY + flow.dy) * TILE_SIZE + 16
 
-              if (flow.dx !== 0 || flow.dy !== 0) {
-                desiredVx = flow.dx
-                desiredVy = flow.dy
-              } else {
-                const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x)
-                desiredVx = Math.cos(angle)
-                desiredVy = Math.sin(angle)
+              if (flow.dx !== 0) {
+                const diffY = curCenterY - enemy.y
+                if (Math.abs(diffY) > 2) {
+                  targetY = curCenterY
+                }
               }
+              if (flow.dy !== 0) {
+                const diffX = curCenterX - enemy.x
+                if (Math.abs(diffX) > 2) {
+                  targetX = curCenterX
+                }
+              }
+
+              const angle = Math.atan2(targetY - enemy.y, targetX - enemy.x)
+              desiredVx = Math.cos(angle)
+              desiredVy = Math.sin(angle)
+            } else {
+              const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x)
+              desiredVx = Math.cos(angle)
+              desiredVy = Math.sin(angle)
             }
 
             let sepX = 0
@@ -916,7 +939,7 @@ export const useGameEngine = () => {
             prevEnemies.forEach((other, oIdx) => {
               if (idx === oIdx || other.hp <= 0) return
               const d = Math.hypot(enemy.x - other.x, enemy.y - other.y)
-              if (d > 0 && d < 26) {
+              if (d > 0 && d < 22) {
                 sepX += (enemy.x - other.x) / d
                 sepY += (enemy.y - other.y) / d
               }
@@ -927,8 +950,8 @@ export const useGameEngine = () => {
               moveSpeed *= 1.35
             }
 
-            let finalVx = desiredVx + sepX * 0.7
-            let finalVy = desiredVy + sepY * 0.7
+            let finalVx = desiredVx + sepX * 0.4
+            let finalVy = desiredVy + sepY * 0.4
             const vLen = Math.hypot(finalVx, finalVy)
             if (vLen > 0) {
               finalVx /= vLen
@@ -978,21 +1001,45 @@ export const useGameEngine = () => {
               soundEngine.playPotionThrow()
             }
 
-            const enemyRadius = 10
+            const enemyRadius = 7.5
             if (isPhasing) {
               currentX += stepX
               currentY += stepY
             } else {
+              let movedX = false
+              let movedY = false
+
               if (!isTileBlocked(currentX + stepX, currentY, enemyRadius)) {
                 currentX += stepX
-              } else if (!isTileBlocked(currentX, currentY + Math.sign(stepY || 1) * moveSpeed * dt, enemyRadius)) {
-                currentY += Math.sign(stepY || 1) * moveSpeed * dt
+                movedX = true
+              } else {
+                const nudgeY = Math.sign(curCenterY - currentY) * moveSpeed * dt * 0.7
+                if (Math.abs(curCenterY - currentY) > 1 && !isTileBlocked(currentX, currentY + nudgeY, enemyRadius)) {
+                  currentY += nudgeY
+                  movedY = true
+                }
               }
 
               if (!isTileBlocked(currentX, currentY + stepY, enemyRadius)) {
                 currentY += stepY
-              } else if (!isTileBlocked(currentX + Math.sign(stepX || 1) * moveSpeed * dt, currentY, enemyRadius)) {
-                currentX += Math.sign(stepX || 1) * moveSpeed * dt
+                movedY = true
+              } else {
+                const nudgeX = Math.sign(curCenterX - currentX) * moveSpeed * dt * 0.7
+                if (Math.abs(curCenterX - currentX) > 1 && !isTileBlocked(currentX + nudgeX, currentY, enemyRadius)) {
+                  currentX += nudgeX
+                  movedX = true
+                }
+              }
+
+              if (!movedX && !movedY) {
+                const cornerNudgeX = Math.sign(curCenterX - currentX) * moveSpeed * dt
+                const cornerNudgeY = Math.sign(curCenterY - currentY) * moveSpeed * dt
+                if (!isTileBlocked(currentX + cornerNudgeX, currentY, enemyRadius)) {
+                  currentX += cornerNudgeX
+                }
+                if (!isTileBlocked(currentX, currentY + cornerNudgeY, enemyRadius)) {
+                  currentY += cornerNudgeY
+                }
               }
             }
 
