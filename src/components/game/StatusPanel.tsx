@@ -6,12 +6,14 @@ interface StatusPanelProps {
   player: Player
   floorNumber: number
   dungeonFloor: DungeonFloor | null
+  enemiesCount: number
 }
 
 export const StatusPanel: React.FC<StatusPanelProps> = ({
   player,
   floorNumber,
   dungeonFloor,
+  enemiesCount,
 }) => {
   const miniMapRef = useRef<HTMLCanvasElement | null>(null)
 
@@ -60,6 +62,10 @@ export const StatusPanel: React.FC<StatusPanelProps> = ({
             <Compass className="w-4 h-4 text-amber-400" />
             <span className="font-fantasy tracking-wider">階層: 第 {floorNumber} 層</span>
           </div>
+        </div>
+
+        <div className={`flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded-full w-fit ${enemiesCount > 0 ? 'bg-red-900/60 text-red-300 border border-red-700' : 'bg-emerald-900/60 text-emerald-300 border border-emerald-700'}`}>
+          {enemiesCount > 0 ? `👹 残り敵: ${enemiesCount}体` : '✅ 階段解放！'}
         </div>
 
         <div className="flex flex-col gap-1.5">

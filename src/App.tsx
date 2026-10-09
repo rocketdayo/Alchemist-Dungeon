@@ -141,6 +141,7 @@ export function App() {
               player={player}
               floorNumber={floorNumber}
               dungeonFloor={dungeonFloor}
+              enemiesCount={enemies.length}
             />
           </div>
 

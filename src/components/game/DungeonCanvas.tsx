@@ -142,18 +142,19 @@ export const DungeonCanvas: React.FC<DungeonCanvasProps> = ({
             ctx.lineWidth = 1
             ctx.strokeRect(px + 0.5, py + 0.5, TILE_SIZE - 1, TILE_SIZE - 1)
           } else if (tile.type === 'stairs') {
-            ctx.fillStyle = '#1e1b4b'
+            const locked = enemies.length > 0
+            ctx.fillStyle = locked ? '#1c0a0a' : '#1e1b4b'
             ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE)
 
-            ctx.fillStyle = '#6366f1'
+            ctx.fillStyle = locked ? '#7f1d1d' : '#6366f1'
             ctx.beginPath()
             ctx.arc(px + 16, py + 16, 12, 0, Math.PI * 2)
             ctx.fill()
 
-            ctx.fillStyle = '#e0e7ff'
+            ctx.fillStyle = locked ? '#fca5a5' : '#e0e7ff'
             ctx.font = '10px serif'
             ctx.textAlign = 'center'
-            ctx.fillText('▼', px + 16, py + 19)
+            ctx.fillText(locked ? '🔒' : '▼', px + 16, py + 20)
           } else {
             ctx.fillStyle = '#1a1b26'
             ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE)

@@ -74,6 +74,8 @@ export const useGameEngine = () => {
   const lastFlowTargetRef = useRef<{ x: number; y: number }>({ x: -1, y: -1 })
   const statsRef = useRef<GameStats>(stats)
   statsRef.current = stats
+  const enemiesRef = useRef<Enemy[]>([])
+  enemiesRef.current = enemies
 
   const updateSettings = useCallback((newSettings: Partial<GameSettings>) => {
     setSettings(prev => {
@@ -628,7 +630,7 @@ export const useGameEngine = () => {
         const tileY = Math.floor(finalY / TILE_SIZE)
 
         const stairs = dungeonFloor.stairsPosition
-        if (tileX === stairs.x && tileY === stairs.y) {
+        if (tileX === stairs.x && tileY === stairs.y && enemiesRef.current.length === 0) {
           setPhase('rest_site')
           soundEngine.playHeal()
         }
