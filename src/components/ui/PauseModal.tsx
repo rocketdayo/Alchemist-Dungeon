@@ -1,10 +1,11 @@
 import { motion } from 'framer-motion'
-import { Play, BookOpen, Settings, Home, Pause } from 'lucide-react'
+import { Play, BookOpen, Settings, Home, Pause, HelpCircle } from 'lucide-react'
 
 interface PauseModalProps {
   isOpen: boolean
   onResume: () => void
   onOpenCodex: () => void
+  onOpenTutorial: () => void
   onOpenSettings: () => void
   onReturnToHome: () => void
 }
@@ -13,6 +14,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
   isOpen,
   onResume,
   onOpenCodex,
+  onOpenTutorial,
   onOpenSettings,
   onReturnToHome,
 }) => {
@@ -44,6 +46,14 @@ export const PauseModal: React.FC<PauseModalProps> = ({
           >
             <Play className="w-4 h-4 fill-current" />
             <span>探索を再開 [ESC]</span>
+          </button>
+
+          <button
+            onClick={onOpenTutorial}
+            className="w-full py-2.5 px-4 rounded-xl bg-dungeon-900/90 hover:bg-dungeon-700/80 border border-dungeon-border text-xs font-bold text-amber-300 hover:text-amber-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <HelpCircle className="w-4 h-4 text-amber-400" />
+            <span>操作説明・指南書を見る</span>
           </button>
 
           <button

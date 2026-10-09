@@ -12,7 +12,9 @@ import { HomeScreen } from './components/ui/HomeScreen'
 import { PauseModal } from './components/ui/PauseModal'
 import { StatsModal } from './components/ui/StatsModal'
 import { SettingsModal } from './components/ui/SettingsModal'
-import { BookOpen, Hand, Pause } from 'lucide-react'
+import { TutorialModal } from './components/ui/TutorialModal'
+import { hasSeenTutorial, setTutorialSeen } from './lib/storage'
+import { BookOpen, Hand, Pause, HelpCircle } from 'lucide-react'
 
 export function App() {
   const {
@@ -51,6 +53,8 @@ export function App() {
   const [isRecipeBookOpen, setIsRecipeBookOpen] = useState(false)
   const [isStatsOpen, setIsStatsOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false)
+  const [isFirstPlayPrompt, setIsFirstPlayPrompt] = useState(false)
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -62,6 +66,33 @@ export function App() {
     return () => window.removeEventListener('keydown', handleKey)
   }, [phase])
 
+  const handleStartGameClick = () => {
+    if (!hasSeenTutorial()) {
+      setIsFirstPlayPrompt(true)
+      setIsTutorialOpen(true)
+    } else {
+      startGame()
+    }
+  }
+
+  const handleCloseTutorial = () => {
+    setTutorialSeen(true)
+    setIsTutorialOpen(false)
+    if (isFirstPlayPrompt) {
+      setIsFirstPlayPrompt(false)
+      startGame()
+    }
+  }
+
+  const handleSkipTutorial = () => {
+    setTutorialSeen(true)
+    setIsTutorialOpen(false)
+    if (isFirstPlayPrompt) {
+      setIsFirstPlayPrompt(false)
+      startGame()
+    }
+  }
+
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-dungeon-900 font-sans text-gray-100 select-none">
       {phase === 'loading' && (
@@ -70,10 +101,14 @@ export function App() {
 
       {phase === 'home' && (
         <HomeScreen
-          onStartGame={startGame}
+          onStartGame={handleStartGameClick}
           onOpenCodex={() => setIsRecipeBookOpen(true)}
           onOpenStats={() => setIsStatsOpen(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenTutorial={() => {
+            setIsFirstPlayPrompt(false)
+            setIsTutorialOpen(true)
+          }}
         />
       )}
 
@@ -129,6 +164,18 @@ export function App() {
             </button>
 
             <button
+              onClick={() => {
+                setIsFirstPlayPrompt(false)
+                setIsTutorialOpen(true)
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-dungeon-800/90 hover:bg-dungeon-700/90 border border-dungeon-border text-amber-300 text-xs font-bold font-fantasy backdrop-blur-md shadow-lg transition-transform active:scale-95 cursor-pointer"
+              title="操作説明"
+            >
+              <HelpCircle className="w-4 h-4" />
+              <span>指南</span>
+            </button>
+
+            <button
               onClick={togglePause}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-dungeon-800/90 hover:bg-dungeon-700/90 border border-dungeon-border text-gray-300 hover:text-white text-xs font-bold font-fantasy backdrop-blur-md shadow-lg transition-transform active:scale-95 cursor-pointer"
               title="一時停止 [ESC]"
@@ -166,6 +213,10 @@ export function App() {
             isOpen={phase === 'paused'}
             onResume={togglePause}
             onOpenCodex={() => setIsRecipeBookOpen(true)}
+            onOpenTutorial={() => {
+              setIsFirstPlayPrompt(false)
+              setIsTutorialOpen(true)
+            }}
             onOpenSettings={() => setIsSettingsOpen(true)}
             onReturnToHome={goToHome}
           />
@@ -197,6 +248,13 @@ export function App() {
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
         onUpdateSettings={updateSettings}
+      />
+
+      <TutorialModal
+        isOpen={isTutorialOpen}
+        onClose={handleCloseTutorial}
+        onSkip={handleSkipTutorial}
+        isInitialTutorial={isFirstPlayPrompt}
       />
     </div>
   )

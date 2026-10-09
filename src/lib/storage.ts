@@ -2,6 +2,7 @@ import type { GameStats, GameSettings } from './types'
 
 const STATS_STORAGE_KEY = 'alchemist_dungeon_stats'
 const SETTINGS_STORAGE_KEY = 'alchemist_dungeon_settings'
+const TUTORIAL_STORAGE_KEY = 'alchemist_dungeon_tutorial_seen'
 
 const DEFAULT_STATS: GameStats = {
   totalPlayTimeSeconds: 0,
@@ -60,5 +61,19 @@ export const loadGameSettings = (): GameSettings => {
 export const saveGameSettings = (settings: GameSettings): void => {
   try {
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
+  } catch {}
+}
+
+export const hasSeenTutorial = (): boolean => {
+  try {
+    return localStorage.getItem(TUTORIAL_STORAGE_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+export const setTutorialSeen = (seen: boolean = true): void => {
+  try {
+    localStorage.setItem(TUTORIAL_STORAGE_KEY, seen ? 'true' : 'false')
   } catch {}
 }

@@ -1,11 +1,12 @@
 import { motion } from 'framer-motion'
-import { Play, BookOpen, BarChart3, Settings, Sparkles, Flame, Droplets, Leaf, Skull } from 'lucide-react'
+import { Play, BookOpen, BarChart3, Settings, Sparkles, Flame, Droplets, Leaf, Skull, HelpCircle } from 'lucide-react'
 
 interface HomeScreenProps {
   onStartGame: () => void
   onOpenCodex: () => void
   onOpenStats: () => void
   onOpenSettings: () => void
+  onOpenTutorial: () => void
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -13,6 +14,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onOpenCodex,
   onOpenStats,
   onOpenSettings,
+  onOpenTutorial,
 }) => {
   return (
     <div className="fixed inset-0 z-40 flex flex-col items-center justify-between p-6 bg-gradient-to-b from-[#090a12] via-[#0d0e1a] to-[#07070b] text-gray-100 select-none overflow-y-auto custom-scrollbar">
@@ -22,6 +24,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           <span>v1.2.0 • ROGUELITE ALCHEMY</span>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={onOpenTutorial}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-dungeon-800/80 hover:bg-dungeon-700 border border-dungeon-border text-xs text-amber-300 hover:text-white transition-all cursor-pointer shadow-md"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+            <span>操作説明</span>
+          </button>
+
           <button
             onClick={onOpenSettings}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-dungeon-800/80 hover:bg-dungeon-700 border border-dungeon-border text-xs text-gray-300 hover:text-white transition-all cursor-pointer shadow-md"
